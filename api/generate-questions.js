@@ -1,9 +1,23 @@
 export default async function handler(req, res) {
+  // CORS 헤더 추가
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { baseQuestion, previousQuestions, stepNumber } = req.body;
+  const { baseQuestion, previousQuestions = [], stepNumber } = req.body;
+
+  if (!process.env.CLAUDE_API_KEY) {
+    return res.status(500).json({ error: 'API key not found' });
+  }
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -19,29 +33,37 @@ export default async function handler(req, res) {
         messages: [
           { 
             role: "user", 
-            content: `기본 질문: "${baseQuestion}"에 대한 탐구 중입니다. 
-            
-현재 ${stepNumber}단계입니다.
-이전 질문들: ${previousQuestions.join(', ')}
+            content: `기본 질문: "${baseQuestion}"에 대한 ${stepNumber}단계 탐구입니다.
 
-다음 탐구할 수 있는 구체적이고 흥미로운 질문 5개를 JSON 형식으로 제안해주세요:
+이전 질문들: ${previousQuestions.length > 0 ? previousQuestions.join(', ') : '없음'}
+
+"${baseQuestion}"와 관련된 구체적이고 흥미로운 질문 5개를 제안해주세요. 이전 질문과 중복되지 않아야 합니다.
+
+다음 JSON 형식으로만 답변해주세요:
 {"questions": ["질문1", "질문2", "질문3", "질문4", "질문5"]}
 
-조건:
-- 기본 질문과 관련성이 높아야 함
-- 이전 질문과 중복되지 않아야 함  
-- 구체적이고 탐구 가능한 질문이어야 함
-- JSON 형식으로만 응답` 
+JSON 형식 외에는 다른 텍스트를 포함하지 마세요.`
           }
         ]
       })
     });
 
+    if (!response.ok) {
+      throw new Error(`Claude API error: ${response.status}`);
+    }
+
     const data = await response.json();
-    const questions = JSON.parse(data.content[0].text);
+    const content = data.content[0].text.trim();
+    
+    // JSON 파싱 시도
+    const questions = JSON.parse(content);
     
     res.status(200).json(questions);
   } catch (error) {
-    res.status(500).json({ error: 'API 호출 실패' });
+    console.error('API Error:', error);
+    res.status(500).json({ 
+      error: 'API 호출 실패',
+      details: error.message 
+    });
   }
 }
