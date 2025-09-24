@@ -1,0 +1,12 @@
+{
+  "name": "20-questions-game",
+  "version": "1.0.0",
+  "description": "AI-powered 20 questions game",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve .",
+    "build": "echo 'No build needed'"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
