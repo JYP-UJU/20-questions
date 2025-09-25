@@ -25,7 +25,6 @@
                 <div class="bg-white rounded-lg shadow-lg p-6">
                     <h3 class="text-xl font-semibold text-blue-600 mb-4">시작 질문</h3>
                     <div id="currentQuestion" class="text-lg text-gray-800 p-4 bg-blue-50 rounded-lg">
-                        <!-- URL에서 질문을 가져옵니다 -->
                         질문을 불러오는 중...
                     </div>
                 </div>
@@ -98,7 +97,6 @@
                         <div class="font-semibold text-blue-600 text-sm">고개 1 (시작)</div>
                         <div class="text-blue-800 mt-1 text-xs leading-tight" id="step1">거미는 왜 먹어?</div>
                     </div>
-                    <!-- 진행하면서 동적으로 추가됩니다 -->
                 </div>
 
                 <div class="mt-4 pt-4 border-t border-gray-200 flex-shrink-0">
@@ -121,15 +119,20 @@
         let sessionId = generateSessionId();
         let currentStepNumber = 1;
         let gameData = [];
-function addToGameData(stepType, content) {
-    gameData.push({
-        step: currentStepNumber,
-        type: stepType,
-        content: content
-    });
-}
 
-        // Claude API 호출 (Vercel Function 사용)
+        function generateSessionId() {
+            return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        }
+
+        function addToGameData(stepType, content) {
+            gameData.push({
+                step: currentStepNumber,
+                type: stepType,
+                content: content
+            });
+        }
+
+        // Claude API 호출
         async function callClaudeAPI(baseQuestion, previousQuestions = []) {
             try {
                 const response = await fetch('/api/generate-questions', {
@@ -188,17 +191,17 @@ function addToGameData(stepType, content) {
         }
 
         // Claude 질문 생성
-async function generateClaudeQuestions(baseQuestion, stepNumber) {
-    document.getElementById('loading').classList.remove('hidden');
+        async function generateClaudeQuestions(baseQuestion, stepNumber) {
+            document.getElementById('loading').classList.remove('hidden');
 
-    // 이전 질문들 수집
-    const previousQuestions = gameData
-        .filter(item => item.type === 'claude_question' || item.type === 'user_question')
-        .map(item => item.content);
+            // 이전 질문들 수집
+            const previousQuestions = gameData
+                .filter(item => item.type === 'claude_question' || item.type === 'user_question')
+                .map(item => item.content);
 
-    try {
-        const result = await callClaudeAPI(baseQuestion, previousQuestions);
-        await displayClaudeQuestions(result.questions, stepNumber);
+            try {
+                const result = await callClaudeAPI(baseQuestion, previousQuestions);
+                await displayClaudeQuestions(result.questions, stepNumber);
                 
                 // Supabase에 Claude 질문들 저장
                 const { error } = await supabase
@@ -241,14 +244,10 @@ async function generateClaudeQuestions(baseQuestion, stepNumber) {
 
         // Claude 질문 선택
         async function selectClaudeQuestion(question, stepNumber) {
-    // 여기에 추가
-    addToGameData('claude_question', question);
-    
-    document.getElementById('selectedQuestionDisplay').textContent = question;
-    document.getElementById('userAnswerSection').classList.remove('hidden');
-    // ... 나머지 기존 코드
+            addToGameData('claude_question', question);
             
-            // Claude 질문 선택창 숨기기
+            document.getElementById('selectedQuestionDisplay').textContent = question;
+            document.getElementById('userAnswerSection').classList.remove('hidden');
             document.getElementById('claudeQuestions').classList.add('hidden');
             
             // 진행상황 업데이트
@@ -269,19 +268,17 @@ async function generateClaudeQuestions(baseQuestion, stepNumber) {
         }
 
         // 답변 제출
-       async function submitAnswer() {
-    const answer = document.getElementById('userAnswer').value.trim();
-    if (!answer) {
-        alert('답변을 입력해주세요.');
-        return;
-    }
+        async function submitAnswer() {
+            const answer = document.getElementById('userAnswer').value.trim();
+            if (!answer) {
+                alert('답변을 입력해주세요.');
+                return;
+            }
 
-    // 여기에 추가
-    addToGameData('user_answer', answer);
+            addToGameData('user_answer', answer);
 
-    // 진행상황 업데이트
-    currentStepNumber++;
-    // ... 나머지 기존 코드
+            // 진행상황 업데이트
+            currentStepNumber++;
             addToProgress(`고개 ${currentStepNumber} (내 생각)`, answer, 'purple');
 
             // Supabase에 답변 저장
@@ -308,19 +305,17 @@ async function generateClaudeQuestions(baseQuestion, stepNumber) {
         }
 
         // 사용자 질문 제출
-async function submitUserQuestion() {
-    const newQuestion = document.getElementById('userNewQuestion').value.trim();
-    if (!newQuestion) {
-        alert('새로운 질문을 입력해주세요.');
-        return;
-    }
+        async function submitUserQuestion() {
+            const newQuestion = document.getElementById('userNewQuestion').value.trim();
+            if (!newQuestion) {
+                alert('새로운 질문을 입력해주세요.');
+                return;
+            }
 
-    // 여기에 추가
-    addToGameData('user_question', newQuestion);
+            addToGameData('user_question', newQuestion);
 
-    // 진행상황 업데이트
-    currentStepNumber++;
-    // ... 나머지 기존 코드
+            // 진행상황 업데이트
+            currentStepNumber++;
             addToProgress(`고개 ${currentStepNumber} (내 질문)`, newQuestion, 'orange');
 
             // Supabase에 사용자 질문 저장
@@ -348,13 +343,13 @@ async function submitUserQuestion() {
             }
         }
 
-        // 진행상황에 추가 (간격 줄이고 텍스트 길이 조정)
+        // 진행상황에 추가
         function addToProgress(stepTitle, content, color) {
             const progressDiv = document.getElementById('gameProgress');
             const stepDiv = document.createElement('div');
-            stepDiv.className = `bg-${color}-50 p-2 rounded-lg mb-2`; // 패딩과 마진 줄임
+            stepDiv.className = `bg-${color}-50 p-2 rounded-lg mb-2`;
             
-            // 텍스트 길이 조정 (더 긴 텍스트도 보이도록)
+            // 텍스트 길이 조정
             const truncatedContent = content.length > 80 ? content.substring(0, 80) + '...' : content;
             
             stepDiv.innerHTML = `
@@ -373,7 +368,6 @@ async function submitUserQuestion() {
         // 게임 완료
         function showGameComplete() {
             alert('🎉 스무고개 완성! 훌륭한 탐구였습니다!');
-            // 완료 처리 로직 추가
         }
 
         // 페이지 로드 시 초기화
