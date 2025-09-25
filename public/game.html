@@ -188,27 +188,17 @@ function addToGameData(stepType, content) {
         }
 
         // Claude 질문 생성
-        async function generateClaudeQuestions(baseQuestion, stepNumber) {
-            document.getElementById('loading').classList.remove('hidden');
+async function generateClaudeQuestions(baseQuestion, stepNumber) {
+    document.getElementById('loading').classList.remove('hidden');
 
-            const prompt = `자연과학 질문에 대해 더 깊이 탐구할 수 있는 후속 질문 5개를 만들어주세요.
+    // 이전 질문들 수집
+    const previousQuestions = gameData
+        .filter(item => item.type === 'claude_question' || item.type === 'user_question')
+        .map(item => item.content);
 
-기본 질문: "${baseQuestion}"
-
-조건:
-1. 각 질문은 서로 다른 관점에서 접근해야 합니다
-2. 호기심을 자극하고 생각을 확장시키는 질문이어야 합니다  
-3. 초등학생도 이해할 수 있는 수준이어야 합니다
-4. 실제로 답변할 수 있는 질문이어야 합니다
-
-JSON 형식으로만 응답하세요:
-{
-  "questions": ["질문1", "질문2", "질문3", "질문4", "질문5"]
-}`;
-
-            try {
-                const result = await callClaudeAPI(prompt);
-                await displayClaudeQuestions(result.questions, stepNumber);
+    try {
+        const result = await callClaudeAPI(baseQuestion, previousQuestions);
+        await displayClaudeQuestions(result.questions, stepNumber);
                 
                 // Supabase에 Claude 질문들 저장
                 const { error } = await supabase
