@@ -241,8 +241,12 @@ async function generateClaudeQuestions(baseQuestion, stepNumber) {
 
         // Claude 질문 선택
         async function selectClaudeQuestion(question, stepNumber) {
-            document.getElementById('selectedQuestionDisplay').textContent = question;
-            document.getElementById('userAnswerSection').classList.remove('hidden');
+    // 여기에 추가
+    addToGameData('claude_question', question);
+    
+    document.getElementById('selectedQuestionDisplay').textContent = question;
+    document.getElementById('userAnswerSection').classList.remove('hidden');
+    // ... 나머지 기존 코드
             
             // Claude 질문 선택창 숨기기
             document.getElementById('claudeQuestions').classList.add('hidden');
