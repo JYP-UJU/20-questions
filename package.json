@@ -2,11 +2,15 @@
   "name": "20-questions-game",
   "version": "1.0.0",
   "description": "AI-powered 20 questions game",
-  "main": "index.html",
+  "main": "server.js",
   "scripts": {
-    "start": "serve .",
-    "build": "echo 'No build needed'"
+    "start": "node server.js"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "express": "^4.18.0",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": "18.x"
+  }
 }
