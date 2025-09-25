@@ -269,15 +269,19 @@ async function generateClaudeQuestions(baseQuestion, stepNumber) {
         }
 
         // 답변 제출
-        async function submitAnswer() {
-            const answer = document.getElementById('userAnswer').value.trim();
-            if (!answer) {
-                alert('답변을 입력해주세요.');
-                return;
-            }
+       async function submitAnswer() {
+    const answer = document.getElementById('userAnswer').value.trim();
+    if (!answer) {
+        alert('답변을 입력해주세요.');
+        return;
+    }
 
-            // 진행상황 업데이트
-            currentStepNumber++;
+    // 여기에 추가
+    addToGameData('user_answer', answer);
+
+    // 진행상황 업데이트
+    currentStepNumber++;
+    // ... 나머지 기존 코드
             addToProgress(`고개 ${currentStepNumber} (내 생각)`, answer, 'purple');
 
             // Supabase에 답변 저장
