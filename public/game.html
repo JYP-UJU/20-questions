@@ -121,11 +121,13 @@
         let sessionId = generateSessionId();
         let currentStepNumber = 1;
         let gameData = [];
-        let isUserTurn = false; // true면 사용자 질문 차례, false면 Claude 선택 차례
-
-        function generateSessionId() {
-            return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-        }
+function addToGameData(stepType, content) {
+    gameData.push({
+        step: currentStepNumber,
+        type: stepType,
+        content: content
+    });
+}
 
         // Claude API 호출 (Vercel Function 사용)
         async function callClaudeAPI(baseQuestion, previousQuestions = []) {
