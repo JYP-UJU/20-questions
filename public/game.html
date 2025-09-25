@@ -308,15 +308,19 @@ async function generateClaudeQuestions(baseQuestion, stepNumber) {
         }
 
         // 사용자 질문 제출
-        async function submitUserQuestion() {
-            const newQuestion = document.getElementById('userNewQuestion').value.trim();
-            if (!newQuestion) {
-                alert('새로운 질문을 입력해주세요.');
-                return;
-            }
+async function submitUserQuestion() {
+    const newQuestion = document.getElementById('userNewQuestion').value.trim();
+    if (!newQuestion) {
+        alert('새로운 질문을 입력해주세요.');
+        return;
+    }
 
-            // 진행상황 업데이트
-            currentStepNumber++;
+    // 여기에 추가
+    addToGameData('user_question', newQuestion);
+
+    // 진행상황 업데이트
+    currentStepNumber++;
+    // ... 나머지 기존 코드
             addToProgress(`고개 ${currentStepNumber} (내 질문)`, newQuestion, 'orange');
 
             // Supabase에 사용자 질문 저장
