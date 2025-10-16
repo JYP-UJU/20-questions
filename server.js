@@ -44,10 +44,12 @@ JSON 형식으로만 응답:
     console.log('Claude API 호출:', { baseQuestion, previousCount: previousQuestions.length });
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",  
-      headers: {
-        "Content-Type": "application/json",
-      },
+  method: "POST",  
+  headers: {
+    "Content-Type": "application/json",
+    "x-api-key": process.env.CLAUDE_API_KEY,
+    "anthropic-version": "2023-06-01"
+  },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514", 
         max_tokens: 1000,
