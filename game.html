@@ -6,6 +6,32 @@
     <title>스무고개 게임</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        body {
+            position: relative;
+        }
+        
+        #backgroundImage {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.15;
+            z-index: -2;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.7);
+            z-index: -1;
+        }
+        
         .concept-card {
             transition: all 0.2s ease;
         }
@@ -18,23 +44,33 @@
             border-color: #16a34a;
             border-width: 3px;
         }
+        
+        .action-button {
+            transition: all 0.2s ease;
+        }
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
+    <img id="backgroundImage" src="" alt="" style="display: none;">
+    
     <div class="container mx-auto px-4 py-8 flex gap-8">
         <!-- 메인 게임 영역 -->
         <div class="flex-1 max-w-2xl">
-            <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
+                <!-- 격려 멘트 (맨 위) -->
+                <div id="encouragementBox" class="hidden bg-gradient-to-r from-yellow-50 to-orange-50 p-5 rounded-lg border-2 border-yellow-300 mb-6">
+                    <p class="text-2xl font-bold text-orange-600 text-center">궁금한 게 생겼네요! 함께 알아가봐요! 🌟</p>
+                </div>
+                
                 <h1 class="text-2xl font-bold text-blue-600 mb-6">시작 질문</h1>
                 
                 <!-- 초기 질문 표시 -->
                 <div class="bg-blue-50 p-4 rounded-lg mb-6">
                     <p id="initialQuestion" class="text-lg font-medium">질문을 불러오는 중...</p>
-                </div>
-
-                <!-- 격려 멘트 -->
-                <div id="encouragementBox" class="hidden bg-gradient-to-r from-yellow-50 to-orange-50 p-5 rounded-lg border-2 border-yellow-300 mb-6">
-                    <p class="text-2xl font-bold text-orange-600 text-center">궁금한 게 생겼네요! 함께 알아가봐요! 🌟</p>
                 </div>
 
                 <!-- 게임 상태 -->
@@ -47,14 +83,14 @@
                 </div>
 
                 <!-- 하단 버튼 -->
-                <div id="actionButtons" class="hidden mt-6 flex gap-3">
-                    <button onclick="goBack()" class="flex-1 bg-gray-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-gray-600 transition-colors">
+                <div id="actionButtons" class="hidden mt-6 flex gap-0">
+                    <button onclick="goBack()" class="action-button flex-1 bg-gray-200 text-gray-700 py-3 px-6 font-medium hover:bg-gray-300 transition-colors border-r border-white">
                         이전 화면
                     </button>
-                    <button onclick="continueThinking()" class="flex-1 bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 transition-colors">
+                    <button onclick="continueThinking()" class="action-button flex-1 bg-blue-200 text-blue-700 py-3 px-6 font-medium hover:bg-blue-300 transition-colors border-r border-white">
                         계속 생각해보기
                     </button>
-                    <button onclick="summarize()" class="flex-1 bg-purple-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-600 transition-colors">
+                    <button onclick="summarize()" class="action-button flex-1 bg-purple-200 text-purple-700 py-3 px-6 font-medium hover:bg-purple-300 transition-colors">
                         정리할래요
                     </button>
                 </div>
@@ -62,7 +98,7 @@
         </div>
 
         <!-- 진행 상황 사이드바 -->
-        <div class="w-80 bg-white rounded-lg shadow-lg p-6">
+        <div class="w-80 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-6">
             <div class="flex items-center gap-2 mb-4">
                 <div class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
                     <span class="text-white text-sm">🎯</span>
@@ -89,12 +125,13 @@
         let currentStep = 0;
         let gameHistory = [];
         let initialQuestion = '';
-        let currentStage = 'start'; // start, concepts, questions, thought
+        let currentStage = 'start';
         let selectedConcepts = [];
         let currentQuestion = '';
-        let stateHistory = []; // 이전 화면 기능을 위한 상태 저장
+        let stateHistory = [];
+        let currentAIAnswer = ''; // 현재 AI 답변 (숨김)
+        let usedConcepts = []; // 사용된 개념어 추적
 
-        // 격려 멘트 목록
         const encouragements = [
             "와, 신선한 시각이에요! 🌟",
             "좋은 질문이네요! 👍",
@@ -133,25 +170,56 @@
             document.getElementById('actionButtons').classList.add('hidden');
         }
 
-        // API 호출 - 개념어 생성
-        async function generateConcepts(previousQuestion = null, userThought = null) {
+        // 배경 이미지 로드
+        async function loadBackgroundImage(question) {
             try {
-                const response = await fetch('/api/generate-concepts', {
+                const response = await fetch('/api/get-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: question })
+                });
+
+                if (!response.ok) throw new Error('이미지 로드 실패');
+                
+                const data = await response.json();
+                const imgElement = document.getElementById('backgroundImage');
+                
+                if (data.imageUrl) {
+                    imgElement.src = data.imageUrl;
+                    imgElement.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('배경 이미지 로드 실패:', error);
+            }
+        }
+
+        // API 호출 - AI 답변 + 개념어 생성
+        async function generateAnswerAndConcepts(question, userThought = null) {
+            try {
+                const response = await fetch('/api/generate-answer-concepts', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         baseQuestion: initialQuestion,
-                        previousQuestion: previousQuestion,
+                        currentQuestion: question,
                         userThought: userThought,
-                        history: gameHistory
+                        usedConcepts: usedConcepts
                     })
                 });
 
                 if (!response.ok) throw new Error(`API 오류: ${response.status}`);
                 const data = await response.json();
+                
+                currentAIAnswer = data.answer || '';
+                
+                // 사용된 개념어 추가
+                if (data.concepts) {
+                    usedConcepts = [...usedConcepts, ...data.concepts];
+                }
+                
                 return data.concepts || ["크기", "색깔", "위치", "구조", "기능", "종류", "시기", "방법"];
             } catch (error) {
-                console.error('개념어 생성 실패:', error);
+                console.error('답변/개념어 생성 실패:', error);
                 return ["크기", "색깔", "위치", "구조", "기능", "종류", "시기", "방법"];
             }
         }
@@ -167,6 +235,7 @@
                         selectedConcepts: concepts,
                         previousQuestion: previousQuestion,
                         userThought: userThought,
+                        aiAnswer: currentAIAnswer,
                         previousQuestions: gameHistory.filter(h => h.type === 'question').map(h => h.question)
                     })
                 });
@@ -199,7 +268,7 @@
             initialDiv.innerHTML = `<strong class="text-blue-800">시작 질문</strong><br><span class="text-blue-700">${initialQuestion}</span>`;
             progressList.appendChild(initialDiv);
             
-            // 히스토리 (질문과 생각만)
+            // 히스토리
             gameHistory.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = 'p-2 rounded text-sm';
@@ -219,7 +288,7 @@
         }
 
         // 개념어 선택 화면
-        async function showConceptSelection(previousQuestion = null, userThought = null) {
+        async function showConceptSelection(question = null, userThought = null) {
             saveState();
             currentStage = 'concepts';
             selectedConcepts = [];
@@ -227,17 +296,17 @@
             showLoading('개념어를 생성하고 있는 중입니다...');
             hideButtons();
             
-            const concepts = await generateConcepts(previousQuestion, userThought);
+            const concepts = await generateAnswerAndConcepts(question || initialQuestion, userThought);
             
             const gameState = document.getElementById('gameState');
             gameState.innerHTML = `
                 <h2 class="text-xl font-bold text-purple-600 mb-6">문제 해결을 위한 힌트로 무엇이 있을까요?</h2>
                 <div class="grid grid-cols-4 gap-3 mb-4">
                     ${concepts.map((concept, index) => `
-                        <div onclick="toggleConcept('${concept}', ${index})" 
+                        <div onclick="toggleConcept('${concept.replace(/'/g, "\\'")}', ${index})" 
                              id="concept-${index}"
                              class="concept-card cursor-pointer bg-amber-50 border-2 border-amber-200 rounded-lg p-4 text-center shadow-md">
-                            <p class="font-medium text-gray-700">${concept}</p>
+                            <p class="font-medium text-gray-700 text-sm">${concept}</p>
                         </div>
                     `).join('')}
                 </div>
@@ -252,7 +321,6 @@
             showButtons();
         }
 
-        // 개념어 선택 토글
         function toggleConcept(concept, index) {
             const card = document.getElementById(`concept-${index}`);
             
@@ -265,7 +333,6 @@
             }
         }
 
-        // 관련없음 처리
         async function handleNoRelation() {
             await showConceptSelection(currentQuestion, gameHistory[gameHistory.length - 1]?.thought);
         }
@@ -306,7 +373,6 @@
             showButtons();
         }
 
-        // 질문 선택
         function selectQuestion(question) {
             saveState();
             currentStep++;
@@ -314,14 +380,14 @@
             gameHistory.push({
                 type: 'question',
                 question: question,
-                step: currentStep
+                step: currentStep,
+                aiAnswer: currentAIAnswer // 백그라운드 답변 저장
             });
             updateProgress();
             
             showThoughtInput(question);
         }
 
-        // 생각 입력 화면
         function showThoughtInput(question) {
             currentStage = 'thought';
             const encouragement = getRandomEncouragement();
@@ -355,18 +421,18 @@
             showButtons();
         }
 
-        // 상태 저장 (이전 화면용)
         function saveState() {
             stateHistory.push({
                 stage: currentStage,
                 step: currentStep,
                 historyLength: gameHistory.length,
                 selectedConcepts: [...selectedConcepts],
-                currentQuestion: currentQuestion
+                currentQuestion: currentQuestion,
+                currentAIAnswer: currentAIAnswer,
+                usedConceptsLength: usedConcepts.length
             });
         }
 
-        // 이전 화면
         function goBack() {
             if (stateHistory.length === 0) {
                 alert('더 이상 돌아갈 수 없습니다.');
@@ -375,21 +441,24 @@
 
             const previousState = stateHistory.pop();
             
-            // 진행상황 복구
             while (gameHistory.length > previousState.historyLength) {
                 gameHistory.pop();
+            }
+            
+            while (usedConcepts.length > previousState.usedConceptsLength) {
+                usedConcepts.pop();
             }
             
             currentStep = previousState.step;
             currentStage = previousState.stage;
             selectedConcepts = previousState.selectedConcepts;
             currentQuestion = previousState.currentQuestion;
+            currentAIAnswer = previousState.currentAIAnswer;
             
             updateProgress();
             
-            // 이전 화면으로
             if (currentStage === 'concepts') {
-                showConceptSelection();
+                showConceptSelection(currentQuestion);
             } else if (currentStage === 'questions') {
                 showQuestionChoices();
             } else if (currentStage === 'thought') {
@@ -397,7 +466,6 @@
             }
         }
 
-        // 계속 생각해보기
         async function continueThinking() {
             if (currentStage === 'concepts') {
                 await showQuestionChoices();
@@ -423,18 +491,19 @@
             }
         }
 
-        // 정리할래요
         function summarize() {
             alert('정리 페이지는 곧 추가될 예정입니다!');
         }
 
-        // 게임 초기화
         async function initializeGame() {
             initialQuestion = getInitialQuestion();
             document.getElementById('initialQuestion').textContent = initialQuestion;
             document.getElementById('encouragementBox').classList.remove('hidden');
             updateProgress();
             hideButtons();
+            
+            // 배경 이미지 로드 (병렬)
+            loadBackgroundImage(initialQuestion);
             
             // 첫 개념어 선택 화면으로
             await showConceptSelection();
