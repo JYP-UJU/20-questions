@@ -26,17 +26,20 @@ app.post('/api/generate-questions', async (req, res) => {
     // 중복 제거된 이전 질문들
     const uniquePrevious = [...new Set(previousQuestions)];
     
-    const prompt = `사용자가 "${baseQuestion}"에 대해 탐구하고 있습니다.
+const prompt = `초등학생이 "${baseQuestion}"에 대해 궁금해하고 있어요.
 
-${uniquePrevious.length > 0 ? `이미 탐구한 질문들: ${uniquePrevious.join(', ')}` : ''}
+${uniquePrevious.length > 0 ? `이미 물어본 질문들: ${uniquePrevious.join(', ')}` : ''}
 
-"${baseQuestion}"와 관련하여 새롭고 구체적인 탐구 질문 5개를 제안해주세요.
+아이들이 쉽게 이해할 수 있는 짧고 간단한 질문 5개를 만들어주세요.
 
 조건:
-- 이전 질문들과 중복되지 않아야 함
-- "${baseQuestion}"와 직접 관련이 있어야 함  
-- 구체적이고 탐구 가능한 질문이어야 함
-- 각 질문은 서로 다른 관점에서 접근해야 함
+- 한 문장으로 짧게 (15자 이내)
+- 쉬운 말로만 (전문용어 금지)
+- 이전 질문과 완전히 다르게
+- 호기심을 자극하는 질문
+- "${baseQuestion}"와 직접 관련있게
+
+예시: "나비는 어디서 살아?", "나비는 뭘 먹어?", "나비는 언제 자?"
 
 JSON 형식으로만 응답:
 {"questions": ["질문1", "질문2", "질문3", "질문4", "질문5"]}`;
