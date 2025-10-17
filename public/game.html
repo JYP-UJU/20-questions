@@ -43,7 +43,7 @@
             </div>
 
             <div class="mt-6 p-4 bg-yellow-50 rounded-lg">
-                <p class="text-sm text-yellow-800">💡 스무고개를 통해 자연의 비밀을 하나씩 풀어보세요!</p>
+                <p class="text-sm text-yellow-800">💡 질문을 통해 탐구를 깊이 있게 해보세요!</p>
             </div>
         </div>
     </div>
@@ -61,8 +61,22 @@
         }
 
         // Claude API 호출
-        async function callClaudeAPI(prompt) {
+        async function callClaudeAPI(contextQuestion, userAnswer = null) {
             try {
+                // 이전 대화 맥락 구성
+                const recentHistory = gameHistory.slice(-3); // 최근 3개만
+                let contextText = '';
+                
+                if (userAnswer) {
+                    contextText = `
+이전 질문: "${contextQuestion}"
+사용자 답변: "${userAnswer}"
+
+위 답변을 바탕으로 더 깊이 탐구할 수 있는 후속 질문 5개를 만들어주세요.`;
+                } else {
+                    contextText = `"${contextQuestion}"에 대한 첫 탐구 질문 5개를 만들어주세요.`;
+                }
+
                 const response = await fetch('/api/generate-questions', {
                     method: 'POST',
                     headers: {
@@ -70,9 +84,10 @@
                     },
                     body: JSON.stringify({
                         baseQuestion: initialQuestion,
+                        contextQuestion: contextQuestion,
+                        userAnswer: userAnswer,
                         previousQuestions: gameHistory.map(h => h.question || h.answer).filter(Boolean),
-                        stepNumber: currentStep + 1,
-                        prompt: prompt
+                        stepNumber: currentStep + 1
                     })
                 });
 
@@ -84,13 +99,12 @@
                 return data.questions || [];
             } catch (error) {
                 console.error('Claude API 오류:', error);
-                // 샘플 질문 반환
                 return [
-                    "이것의 크기는 어느 정도인가요?",
-                    "이것은 어떤 색깔인가요?", 
-                    "이것은 어디에서 찾을 수 있나요?",
-                    "이것의 주요 특징은 무엇인가요?",
-                    "이것은 어떤 용도로 사용되나요?"
+                    "이것은 무엇으로 만들어져 있을까?",
+                    "이것의 크기는 어느 정도일까?", 
+                    "이것은 어디에서 발견될까?",
+                    "이것은 어떤 특징이 있을까?",
+                    "이것은 무엇에 사용될까?"
                 ];
             }
         }
@@ -102,6 +116,13 @@
             const progressList = document.getElementById('progressList');
             progressList.innerHTML = '';
             
+            // 시작 질문을 맨 위에 파란색으로 표시
+            const initialDiv = document.createElement('div');
+            initialDiv.className = 'p-3 rounded bg-blue-100 border-2 border-blue-300';
+            initialDiv.innerHTML = `<strong class="text-blue-800">시작 질문</strong><br><span class="text-blue-700">${initialQuestion}</span>`;
+            progressList.appendChild(initialDiv);
+            
+            // 나머지 히스토리
             gameHistory.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = 'p-2 rounded text-sm';
@@ -119,14 +140,14 @@
         }
 
         // 5개 선택지 표시
-        function showQuestionChoices(questions) {
+        function showQuestionChoices(questions, contextQuestion) {
             const gameState = document.getElementById('gameState');
             
             gameState.innerHTML = `
                 <h2 class="text-xl font-bold text-green-600 mb-4">어떤 방향으로 탐구해볼까요?</h2>
                 <div class="space-y-3">
                     ${questions.map((q, index) => `
-                        <button onclick="selectQuestion('${q.replace(/'/g, "\\'")}', ${index})" 
+                        <button onclick='selectQuestion(\`${q.replace(/`/g, '\\`')}\`, \`${contextQuestion.replace(/`/g, '\\`')}\`)' 
                                 class="w-full p-4 text-left border border-green-200 rounded-lg hover:bg-green-50 transition-colors">
                             ${q}
                         </button>
@@ -136,11 +157,12 @@
         }
 
         // 질문 선택 처리
-        function selectQuestion(question, index) {
+        function selectQuestion(question, contextQuestion) {
             currentStep++;
             gameHistory.push({
                 type: 'question',
                 question: question,
+                contextQuestion: contextQuestion,
                 step: currentStep
             });
             
@@ -186,6 +208,8 @@
             }
 
             currentStep++;
+            const lastQuestion = gameHistory[gameHistory.length - 1].question;
+            
             gameHistory.push({
                 type: 'answer',
                 answer: userAnswer,
@@ -202,22 +226,19 @@
                 </div>
             `;
 
-            // 새로운 질문 생성
+            // 새로운 질문 생성 (직전 질문과 답변 기반)
             try {
-                const questions = await callClaudeAPI(`
-                    사용자의 답변: "${userAnswer}"를 바탕으로 더 깊이 탐구할 수 있는 새로운 질문 5개를 만들어주세요.
-                `);
-                
-                showQuestionChoices(questions);
+                const questions = await callClaudeAPI(lastQuestion, userAnswer);
+                showQuestionChoices(questions, lastQuestion);
             } catch (error) {
                 console.error('새 질문 생성 실패:', error);
                 showQuestionChoices([
-                    "이것의 원리를 더 자세히 알아볼까요?",
-                    "다른 관점에서 접근해볼까요?",
-                    "실제 사례를 찾아볼까요?",
-                    "비슷한 다른 것들과 비교해볼까요?",
-                    "이것의 활용 방법을 생각해볼까요?"
-                ]);
+                    "더 구체적으로 알아볼까?",
+                    "다른 관점에서 보면?",
+                    "실제 사례는?",
+                    "비교해보면?",
+                    "응용할 수 있을까?"
+                ], lastQuestion);
             }
         }
 
@@ -226,9 +247,11 @@
             initialQuestion = getInitialQuestion();
             document.getElementById('initialQuestion').textContent = initialQuestion;
             
+            updateProgress(); // 시작 질문 표시
+            
             // 첫 번째 질문들 생성
-            const questions = await callClaudeAPI(`"${initialQuestion}"에 대한 첫 탐구 질문들을 만들어주세요.`);
-            showQuestionChoices(questions);
+            const questions = await callClaudeAPI(initialQuestion);
+            showQuestionChoices(questions, initialQuestion);
         }
 
         // 페이지 로드 시 게임 시작
