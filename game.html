@@ -20,7 +20,11 @@
 
                 <!-- 게임 상태 -->
                 <div id="gameState">
-                    <!-- 여기에 게임 단계별 내용이 들어감 -->
+                    <div class="text-center py-12">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mx-auto mb-4"></div>
+                        <p class="text-lg text-gray-600 font-semibold">질문을 생성하고 있는 중입니다...</p>
+                        <p class="text-sm text-gray-500 mt-2">잠시만 기다려 주세요</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -38,12 +42,12 @@
                 <p class="text-sm text-gray-600">진행: <span id="progressCount">0</span> / 20</p>
             </div>
 
-            <div id="progressList" class="space-y-2">
+            <div id="progressList" class="space-y-2 max-h-[600px] overflow-y-auto">
                 <!-- 진행 상황이 여기에 추가됨 -->
             </div>
 
             <div class="mt-6 p-4 bg-yellow-50 rounded-lg">
-                <p class="text-sm text-yellow-800">💡 질문을 통해 탐구를 깊이 있게 해보세요!</p>
+                <p class="text-sm text-yellow-800">💡 생각하고 탐구하며 답을 찾아가요!</p>
             </div>
         </div>
     </div>
@@ -54,29 +58,43 @@
         let gameHistory = [];
         let initialQuestion = '';
 
+        // 격려 멘트 목록
+        const encouragements = [
+            "와, 신선한 시각이에요! 🌟",
+            "좋은 질문이네요! 👍",
+            "재미있는 관점이에요! 💡",
+            "창의적인 접근이에요! ✨",
+            "멋진 생각이에요! 🎯",
+            "호기심이 대단해요! 🔍",
+            "깊이 있는 질문이네요! 🤔",
+            "탐구 정신이 훌륭해요! 🌈"
+        ];
+
+        // 랜덤 격려 멘트
+        function getRandomEncouragement() {
+            return encouragements[Math.floor(Math.random() * encouragements.length)];
+        }
+
         // URL에서 초기 질문 가져오기
         function getInitialQuestion() {
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get('q') || '질문을 찾을 수 없습니다';
         }
 
-        // Claude API 호출
-        async function callClaudeAPI(contextQuestion, userAnswer = null) {
+        // 로딩 표시
+        function showLoading(message = '질문을 생성하고 있는 중입니다...') {
+            document.getElementById('gameState').innerHTML = `
+                <div class="text-center py-12">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mx-auto mb-4"></div>
+                    <p class="text-lg text-gray-600 font-semibold">${message}</p>
+                    <p class="text-sm text-gray-500 mt-2">잠시만 기다려 주세요</p>
+                </div>
+            `;
+        }
+
+        // Claude API 호출 - 질문 생성
+        async function generateQuestions(previousQuestion = null, userThought = null) {
             try {
-                // 이전 대화 맥락 구성
-                const recentHistory = gameHistory.slice(-3); // 최근 3개만
-                let contextText = '';
-                
-                if (userAnswer) {
-                    contextText = `
-이전 질문: "${contextQuestion}"
-사용자 답변: "${userAnswer}"
-
-위 답변을 바탕으로 더 깊이 탐구할 수 있는 후속 질문 5개를 만들어주세요.`;
-                } else {
-                    contextText = `"${contextQuestion}"에 대한 첫 탐구 질문 5개를 만들어주세요.`;
-                }
-
                 const response = await fetch('/api/generate-questions', {
                     method: 'POST',
                     headers: {
@@ -84,27 +102,24 @@
                     },
                     body: JSON.stringify({
                         baseQuestion: initialQuestion,
-                        contextQuestion: contextQuestion,
-                        userAnswer: userAnswer,
-                        previousQuestions: gameHistory.map(h => h.question || h.answer).filter(Boolean),
+                        previousQuestion: previousQuestion,
+                        userThought: userThought,
+                        previousQuestions: gameHistory.filter(h => h.type === 'question').map(h => h.question),
                         stepNumber: currentStep + 1
                     })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`API 오류: ${response.status}`);
-                }
-
+                if (!response.ok) throw new Error(`API 오류: ${response.status}`);
                 const data = await response.json();
                 return data.questions || [];
             } catch (error) {
-                console.error('Claude API 오류:', error);
+                console.error('질문 생성 실패:', error);
                 return [
-                    "이것은 무엇으로 만들어져 있을까?",
-                    "이것의 크기는 어느 정도일까?", 
-                    "이것은 어디에서 발견될까?",
-                    "이것은 어떤 특징이 있을까?",
-                    "이것은 무엇에 사용될까?"
+                    "이것의 구조는 어떻게 되어 있을까?",
+                    "이것은 어떤 환경에 있을까?",
+                    "이것과 비슷한 것은 무엇일까?",
+                    "이것의 역할은 무엇일까?",
+                    "이것은 어떻게 작동할까?"
                 ];
             }
         }
@@ -116,39 +131,42 @@
             const progressList = document.getElementById('progressList');
             progressList.innerHTML = '';
             
-            // 시작 질문을 맨 위에 파란색으로 표시
+            // 시작 질문
             const initialDiv = document.createElement('div');
             initialDiv.className = 'p-3 rounded bg-blue-100 border-2 border-blue-300';
             initialDiv.innerHTML = `<strong class="text-blue-800">시작 질문</strong><br><span class="text-blue-700">${initialQuestion}</span>`;
             progressList.appendChild(initialDiv);
             
-            // 나머지 히스토리
+            // 히스토리
             gameHistory.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = 'p-2 rounded text-sm';
                 
                 if (item.type === 'question') {
                     div.className += ' bg-green-100 text-green-800';
-                    div.innerHTML = `<strong>고개 ${index + 1}</strong><br>${item.question}`;
-                } else if (item.type === 'answer') {
+                    div.innerHTML = `<strong>고개 ${Math.floor(index/2) + 1} - 질문</strong><br>${item.question}`;
+                } else if (item.type === 'thought') {
                     div.className += ' bg-purple-100 text-purple-800';
-                    div.innerHTML = `<strong>고개 ${index + 1} (내 생각)</strong><br>${item.answer}`;
+                    div.innerHTML = `<strong>내 생각</strong><br>${item.thought}`;
                 }
                 
                 progressList.appendChild(div);
             });
+
+            // 스크롤을 맨 아래로
+            progressList.scrollTop = progressList.scrollHeight;
         }
 
         // 5개 선택지 표시
-        function showQuestionChoices(questions, contextQuestion) {
+        function showQuestionChoices(questions) {
             const gameState = document.getElementById('gameState');
             
             gameState.innerHTML = `
                 <h2 class="text-xl font-bold text-green-600 mb-4">어떤 방향으로 탐구해볼까요?</h2>
                 <div class="space-y-3">
                     ${questions.map((q, index) => `
-                        <button onclick='selectQuestion(\`${q.replace(/`/g, '\\`')}\`, \`${contextQuestion.replace(/`/g, '\\`')}\`)' 
-                                class="w-full p-4 text-left border border-green-200 rounded-lg hover:bg-green-50 transition-colors">
+                        <button onclick='selectQuestion(\`${q.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`)' 
+                                class="w-full p-4 text-left border-2 border-green-200 rounded-lg hover:bg-green-50 hover:border-green-400 transition-colors">
                             ${q}
                         </button>
                     `).join('')}
@@ -157,101 +175,87 @@
         }
 
         // 질문 선택 처리
-        function selectQuestion(question, contextQuestion) {
+        function selectQuestion(question) {
             currentStep++;
             gameHistory.push({
                 type: 'question',
                 question: question,
-                contextQuestion: contextQuestion,
                 step: currentStep
             });
-            
             updateProgress();
-            showAnswerInput(question);
+            
+            // 격려 멘트와 함께 생각 입력 화면 표시
+            showThoughtInput(question);
         }
 
-        // 답변 입력 화면 표시
-        function showAnswerInput(question) {
+        // 사용자 생각 입력 화면
+        function showThoughtInput(question) {
             const gameState = document.getElementById('gameState');
+            const encouragement = getRandomEncouragement();
             
             gameState.innerHTML = `
-                <h2 class="text-xl font-bold text-orange-600 mb-4">이제 당신이 질문해보세요!</h2>
-                <div class="bg-orange-50 p-4 rounded-lg mb-4">
-                    <p class="font-medium mb-2">선택한 탐구 방향:</p>
-                    <p class="text-orange-700">${question}</p>
-                </div>
                 <div class="space-y-4">
-                    <label class="block text-sm font-medium text-gray-700">
-                        탐구하면서 새롭게 궁금한 것을 질문으로 만들어보세요...
-                    </label>
-                    <textarea 
-                        id="userAnswer" 
-                        rows="4" 
-                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                        placeholder="예: 이 방향으로 생각해보니 또 다른 궁금한 점이 생겼어요..."></textarea>
-                    <button 
-                        onclick="submitAnswer()" 
-                        class="w-full bg-orange-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-orange-600 transition-colors">
-                        질문 제출하고 계속 탐구하기!
-                    </button>
+                    <div class="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+                        <p class="font-semibold text-green-800 mb-2">선택한 질문:</p>
+                        <p class="text-green-700 text-lg">${question}</p>
+                    </div>
+                    
+                    <div class="bg-gradient-to-r from-yellow-50 to-orange-50 p-5 rounded-lg border-2 border-yellow-300">
+                        <p class="text-2xl font-bold text-orange-600 text-center mb-2">${encouragement}</p>
+                        <p class="text-center text-gray-700">이 질문에 대해 어떻게 생각하나요?</p>
+                    </div>
+                    
+                    <div class="bg-purple-50 p-4 rounded-lg">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            이 질문에 대한 당신의 생각이나 추측을 자유롭게 적어보세요
+                        </label>
+                        <textarea 
+                            id="userThought" 
+                            rows="4" 
+                            class="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                            placeholder="예: 아마도... / 혹시... / 만약에... / 왜냐하면..."></textarea>
+                        <button 
+                            onclick="submitThought('${question.replace(/'/g, "\\'")})" 
+                            class="w-full mt-3 bg-purple-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-600 transition-colors">
+                            생각 제출하고 계속 탐구하기!
+                        </button>
+                    </div>
                 </div>
             `;
         }
 
-        // 답변 제출 처리
-        async function submitAnswer() {
-            const userAnswer = document.getElementById('userAnswer').value.trim();
+        // 생각 제출 처리
+        async function submitThought(question) {
+            const userThought = document.getElementById('userThought').value.trim();
             
-            if (!userAnswer) {
-                alert('답변을 입력해주세요!');
+            if (!userThought) {
+                alert('생각을 입력해주세요!');
                 return;
             }
 
             currentStep++;
-            const lastQuestion = gameHistory[gameHistory.length - 1].question;
-            
             gameHistory.push({
-                type: 'answer',
-                answer: userAnswer,
+                type: 'thought',
+                thought: userThought,
                 step: currentStep
             });
-            
             updateProgress();
             
-            // 로딩 상태
-            document.getElementById('gameState').innerHTML = `
-                <div class="text-center py-8">
-                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                    <p class="mt-2 text-gray-600">다음 탐구 방향을 생각 중...</p>
-                </div>
-            `;
-
-            // 새로운 질문 생성 (직전 질문과 답변 기반)
-            try {
-                const questions = await callClaudeAPI(lastQuestion, userAnswer);
-                showQuestionChoices(questions, lastQuestion);
-            } catch (error) {
-                console.error('새 질문 생성 실패:', error);
-                showQuestionChoices([
-                    "더 구체적으로 알아볼까?",
-                    "다른 관점에서 보면?",
-                    "실제 사례는?",
-                    "비교해보면?",
-                    "응용할 수 있을까?"
-                ], lastQuestion);
-            }
+            // 새 질문들 생성
+            showLoading('다음 탐구 질문을 생성하고 있는 중입니다...');
+            const questions = await generateQuestions(question, userThought);
+            showQuestionChoices(questions);
         }
 
         // 게임 초기화
         async function initializeGame() {
             initialQuestion = getInitialQuestion();
             document.getElementById('initialQuestion').textContent = initialQuestion;
+            updateProgress();
             
-            updateProgress(); // 시작 질문 표시
-            
-            // 첫 번째 질문들 생성
-            const questions = await callClaudeAPI(initialQuestion);
-            showQuestionChoices(questions, initialQuestion);
+            // 첫 질문들 생성
+            const questions = await generateQuestions();
+            showQuestionChoices(questions);
         }
 
         // 페이지 로드 시 게임 시작
