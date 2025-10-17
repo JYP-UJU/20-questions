@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스무고개 게임</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .concept-card {
+            transition: all 0.2s ease;
+        }
+        .concept-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+        }
+        .concept-card.selected {
+            background-color: #dcfce7;
+            border-color: #16a34a;
+            border-width: 3px;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto px-4 py-8 flex gap-8">
@@ -18,6 +32,11 @@
                     <p id="initialQuestion" class="text-lg font-medium">질문을 불러오는 중...</p>
                 </div>
 
+                <!-- 격려 멘트 -->
+                <div id="encouragementBox" class="hidden bg-gradient-to-r from-yellow-50 to-orange-50 p-5 rounded-lg border-2 border-yellow-300 mb-6">
+                    <p class="text-2xl font-bold text-orange-600 text-center">궁금한 게 생겼네요! 함께 알아가봐요! 🌟</p>
+                </div>
+
                 <!-- 게임 상태 -->
                 <div id="gameState">
                     <div class="text-center py-12">
@@ -25,6 +44,19 @@
                         <p class="text-lg text-gray-600 font-semibold">질문을 생성하고 있는 중입니다...</p>
                         <p class="text-sm text-gray-500 mt-2">잠시만 기다려 주세요</p>
                     </div>
+                </div>
+
+                <!-- 하단 버튼 -->
+                <div id="actionButtons" class="hidden mt-6 flex gap-3">
+                    <button onclick="goBack()" class="flex-1 bg-gray-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-gray-600 transition-colors">
+                        이전 화면
+                    </button>
+                    <button onclick="continueThinking()" class="flex-1 bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 transition-colors">
+                        계속 생각해보기
+                    </button>
+                    <button onclick="summarize()" class="flex-1 bg-purple-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-600 transition-colors">
+                        정리할래요
+                    </button>
                 </div>
             </div>
         </div>
@@ -57,6 +89,10 @@
         let currentStep = 0;
         let gameHistory = [];
         let initialQuestion = '';
+        let currentStage = 'start'; // start, concepts, questions, thought
+        let selectedConcepts = [];
+        let currentQuestion = '';
+        let stateHistory = []; // 이전 화면 기능을 위한 상태 저장
 
         // 격려 멘트 목록
         const encouragements = [
@@ -70,18 +106,15 @@
             "탐구 정신이 훌륭해요! 🌈"
         ];
 
-        // 랜덤 격려 멘트
         function getRandomEncouragement() {
             return encouragements[Math.floor(Math.random() * encouragements.length)];
         }
 
-        // URL에서 초기 질문 가져오기
         function getInitialQuestion() {
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get('q') || '질문을 찾을 수 없습니다';
         }
 
-        // 로딩 표시
         function showLoading(message = '질문을 생성하고 있는 중입니다...') {
             document.getElementById('gameState').innerHTML = `
                 <div class="text-center py-12">
@@ -92,20 +125,49 @@
             `;
         }
 
-        // Claude API 호출 - 질문 생성
-        async function generateQuestions(previousQuestion = null, userThought = null) {
+        function showButtons() {
+            document.getElementById('actionButtons').classList.remove('hidden');
+        }
+
+        function hideButtons() {
+            document.getElementById('actionButtons').classList.add('hidden');
+        }
+
+        // API 호출 - 개념어 생성
+        async function generateConcepts(previousQuestion = null, userThought = null) {
             try {
-                const response = await fetch('/api/generate-questions', {
+                const response = await fetch('/api/generate-concepts', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         baseQuestion: initialQuestion,
                         previousQuestion: previousQuestion,
                         userThought: userThought,
-                        previousQuestions: gameHistory.filter(h => h.type === 'question').map(h => h.question),
-                        stepNumber: currentStep + 1
+                        history: gameHistory
+                    })
+                });
+
+                if (!response.ok) throw new Error(`API 오류: ${response.status}`);
+                const data = await response.json();
+                return data.concepts || ["크기", "색깔", "위치", "구조", "기능", "종류", "시기", "방법"];
+            } catch (error) {
+                console.error('개념어 생성 실패:', error);
+                return ["크기", "색깔", "위치", "구조", "기능", "종류", "시기", "방법"];
+            }
+        }
+
+        // API 호출 - 질문 생성
+        async function generateQuestions(concepts, previousQuestion = null, userThought = null) {
+            try {
+                const response = await fetch('/api/generate-questions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        baseQuestion: initialQuestion,
+                        selectedConcepts: concepts,
+                        previousQuestion: previousQuestion,
+                        userThought: userThought,
+                        previousQuestions: gameHistory.filter(h => h.type === 'question').map(h => h.question)
                     })
                 });
 
@@ -137,14 +199,14 @@
             initialDiv.innerHTML = `<strong class="text-blue-800">시작 질문</strong><br><span class="text-blue-700">${initialQuestion}</span>`;
             progressList.appendChild(initialDiv);
             
-            // 히스토리
+            // 히스토리 (질문과 생각만)
             gameHistory.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = 'p-2 rounded text-sm';
                 
                 if (item.type === 'question') {
                     div.className += ' bg-green-100 text-green-800';
-                    div.innerHTML = `<strong>고개 ${Math.floor(index/2) + 1} - 질문</strong><br>${item.question}`;
+                    div.innerHTML = `<strong>고개 ${Math.floor(index/2) + 1}</strong><br>${item.question}`;
                 } else if (item.type === 'thought') {
                     div.className += ' bg-purple-100 text-purple-800';
                     div.innerHTML = `<strong>내 생각</strong><br>${item.thought}`;
@@ -153,18 +215,86 @@
                 progressList.appendChild(div);
             });
 
-            // 스크롤을 맨 아래로
             progressList.scrollTop = progressList.scrollHeight;
         }
 
-        // 5개 선택지 표시
-        function showQuestionChoices(questions) {
-            const gameState = document.getElementById('gameState');
+        // 개념어 선택 화면
+        async function showConceptSelection(previousQuestion = null, userThought = null) {
+            saveState();
+            currentStage = 'concepts';
+            selectedConcepts = [];
             
+            showLoading('개념어를 생성하고 있는 중입니다...');
+            hideButtons();
+            
+            const concepts = await generateConcepts(previousQuestion, userThought);
+            
+            const gameState = document.getElementById('gameState');
+            gameState.innerHTML = `
+                <h2 class="text-xl font-bold text-purple-600 mb-6">문제 해결을 위한 힌트로 무엇이 있을까요?</h2>
+                <div class="grid grid-cols-4 gap-3 mb-4">
+                    ${concepts.map((concept, index) => `
+                        <div onclick="toggleConcept('${concept}', ${index})" 
+                             id="concept-${index}"
+                             class="concept-card cursor-pointer bg-amber-50 border-2 border-amber-200 rounded-lg p-4 text-center shadow-md">
+                            <p class="font-medium text-gray-700">${concept}</p>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="flex justify-center">
+                    <div onclick="handleNoRelation()" 
+                         class="concept-card cursor-pointer bg-gray-100 border-2 border-gray-300 rounded-lg p-4 w-48 text-center shadow-md">
+                        <p class="font-medium text-gray-600">관련없음</p>
+                    </div>
+                </div>
+            `;
+            
+            showButtons();
+        }
+
+        // 개념어 선택 토글
+        function toggleConcept(concept, index) {
+            const card = document.getElementById(`concept-${index}`);
+            
+            if (selectedConcepts.includes(concept)) {
+                selectedConcepts = selectedConcepts.filter(c => c !== concept);
+                card.classList.remove('selected');
+            } else {
+                selectedConcepts.push(concept);
+                card.classList.add('selected');
+            }
+        }
+
+        // 관련없음 처리
+        async function handleNoRelation() {
+            await showConceptSelection(currentQuestion, gameHistory[gameHistory.length - 1]?.thought);
+        }
+
+        // 5개 질문 선택 화면
+        async function showQuestionChoices() {
+            if (selectedConcepts.length === 0) {
+                alert('최소 하나의 개념어를 선택해주세요!');
+                return;
+            }
+
+            saveState();
+            currentStage = 'questions';
+            
+            showLoading('질문을 생성하고 있는 중입니다...');
+            hideButtons();
+            
+            const lastThought = gameHistory.filter(h => h.type === 'thought').pop();
+            const questions = await generateQuestions(
+                selectedConcepts, 
+                currentQuestion,
+                lastThought?.thought
+            );
+            
+            const gameState = document.getElementById('gameState');
             gameState.innerHTML = `
                 <h2 class="text-xl font-bold text-green-600 mb-4">어떤 방향으로 탐구해볼까요?</h2>
                 <div class="space-y-3">
-                    ${questions.map((q, index) => `
+                    ${questions.map(q => `
                         <button onclick='selectQuestion(\`${q.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`)' 
                                 class="w-full p-4 text-left border-2 border-green-200 rounded-lg hover:bg-green-50 hover:border-green-400 transition-colors">
                             ${q}
@@ -172,11 +302,15 @@
                     `).join('')}
                 </div>
             `;
+            
+            showButtons();
         }
 
-        // 질문 선택 처리
+        // 질문 선택
         function selectQuestion(question) {
+            saveState();
             currentStep++;
+            currentQuestion = question;
             gameHistory.push({
                 type: 'question',
                 question: question,
@@ -184,15 +318,15 @@
             });
             updateProgress();
             
-            // 격려 멘트와 함께 생각 입력 화면 표시
             showThoughtInput(question);
         }
 
-        // 사용자 생각 입력 화면
+        // 생각 입력 화면
         function showThoughtInput(question) {
-            const gameState = document.getElementById('gameState');
+            currentStage = 'thought';
             const encouragement = getRandomEncouragement();
             
+            const gameState = document.getElementById('gameState');
             gameState.innerHTML = `
                 <div class="space-y-4">
                     <div class="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
@@ -214,51 +348,98 @@
                             rows="4" 
                             class="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                             placeholder="예: 아마도... / 혹시... / 만약에... / 왜냐하면..."></textarea>
-                        <button 
-                            onclick="submitThought('${question.replace(/'/g, "\\'")})" 
-                            class="w-full mt-3 bg-purple-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-600 transition-colors">
-                            생각 제출하고 계속 탐구하기!
-                        </button>
                     </div>
                 </div>
             `;
+            
+            showButtons();
         }
 
-        // 생각 제출 처리
-        async function submitThought(question) {
-            const userThought = document.getElementById('userThought').value.trim();
-            
-            if (!userThought) {
-                alert('생각을 입력해주세요!');
+        // 상태 저장 (이전 화면용)
+        function saveState() {
+            stateHistory.push({
+                stage: currentStage,
+                step: currentStep,
+                historyLength: gameHistory.length,
+                selectedConcepts: [...selectedConcepts],
+                currentQuestion: currentQuestion
+            });
+        }
+
+        // 이전 화면
+        function goBack() {
+            if (stateHistory.length === 0) {
+                alert('더 이상 돌아갈 수 없습니다.');
                 return;
             }
 
-            currentStep++;
-            gameHistory.push({
-                type: 'thought',
-                thought: userThought,
-                step: currentStep
-            });
+            const previousState = stateHistory.pop();
+            
+            // 진행상황 복구
+            while (gameHistory.length > previousState.historyLength) {
+                gameHistory.pop();
+            }
+            
+            currentStep = previousState.step;
+            currentStage = previousState.stage;
+            selectedConcepts = previousState.selectedConcepts;
+            currentQuestion = previousState.currentQuestion;
+            
             updateProgress();
             
-            // 새 질문들 생성
-            showLoading('다음 탐구 질문을 생성하고 있는 중입니다...');
-            const questions = await generateQuestions(question, userThought);
-            showQuestionChoices(questions);
+            // 이전 화면으로
+            if (currentStage === 'concepts') {
+                showConceptSelection();
+            } else if (currentStage === 'questions') {
+                showQuestionChoices();
+            } else if (currentStage === 'thought') {
+                showThoughtInput(currentQuestion);
+            }
+        }
+
+        // 계속 생각해보기
+        async function continueThinking() {
+            if (currentStage === 'concepts') {
+                await showQuestionChoices();
+            } else if (currentStage === 'questions') {
+                alert('질문을 선택해주세요!');
+            } else if (currentStage === 'thought') {
+                const userThought = document.getElementById('userThought')?.value.trim();
+                
+                if (!userThought) {
+                    alert('생각을 입력해주세요!');
+                    return;
+                }
+
+                currentStep++;
+                gameHistory.push({
+                    type: 'thought',
+                    thought: userThought,
+                    step: currentStep
+                });
+                updateProgress();
+                
+                await showConceptSelection(currentQuestion, userThought);
+            }
+        }
+
+        // 정리할래요
+        function summarize() {
+            alert('정리 페이지는 곧 추가될 예정입니다!');
         }
 
         // 게임 초기화
         async function initializeGame() {
             initialQuestion = getInitialQuestion();
             document.getElementById('initialQuestion').textContent = initialQuestion;
+            document.getElementById('encouragementBox').classList.remove('hidden');
             updateProgress();
+            hideButtons();
             
-            // 첫 질문들 생성
-            const questions = await generateQuestions();
-            showQuestionChoices(questions);
+            // 첫 개념어 선택 화면으로
+            await showConceptSelection();
         }
 
-        // 페이지 로드 시 게임 시작
         window.onload = initializeGame;
     </script>
 </body>
